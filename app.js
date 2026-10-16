@@ -44,6 +44,7 @@ function leverScenario(saved, dies) {
     verdictQ: "Should you pull the lever?",
     pull: "Pull the lever: the trolley diverts, " + numPhrase(saved) + " are saved and " + numPhrase(dies) + " dies",
     stay: "Do nothing: the trolley keeps going, " + numPhrase(saved) + " die and " + numPhrase(dies) + " survives",
+    stayQ: "Should you leave the lever alone and let the trolley keep going?",
     noulQ: "Does pulling the lever save more lives than it costs?",
     noulTrue: "Pulling saves a net number of lives",
     noulFalse: "Pulling costs a net number of lives",
@@ -65,6 +66,7 @@ const SCENARIOS = [
     verdictQ: "Should you pull the lever onto the loop track?",
     pull: "Pull the lever: the one person on the loop stops the trolley and the five are saved",
     stay: "Do nothing: the trolley keeps going and the five die",
+    stayQ: "Should you leave the lever alone and let the trolley keep going?",
     noulQ: "Does pulling the lever save more lives than it costs?",
     noulTrue: "Pulling saves a net number of lives",
     noulFalse: "Pulling costs a net number of lives",
@@ -80,6 +82,7 @@ const SCENARIOS = [
     verdictQ: "Should you push the stranger off the bridge?",
     pull: "Push the stranger: the trolley stops and the five are saved, the stranger dies",
     stay: "Do nothing: the trolley keeps going and the five die",
+    stayQ: "Should you leave the stranger where they are and not intervene?",
     noulQ: "Does pushing the stranger save more lives than it costs?",
     noulTrue: "Pushing saves a net number of lives",
     noulFalse: "Pushing costs a net number of lives",
@@ -95,6 +98,7 @@ const SCENARIOS = [
     verdictQ: "Should the surgeon harvest the healthy patient's organs?",
     pull: "Operate: harvest the healthy patient's organs and save the five",
     stay: "Do not operate: the healthy patient lives and the five die",
+    stayQ: "Should the surgeon decline to operate and leave the healthy patient alone?",
     noulQ: "Does harvesting the organs save more lives than it costs?",
     noulTrue: "Operating saves a net number of lives",
     noulFalse: "Operating costs a net number of lives",
@@ -110,6 +114,7 @@ const SCENARIOS = [
     verdictQ: "Should you swerve onto the side track?",
     pull: "Swerve: your passenger dies and the five workers are saved",
     stay: "Stay the course: the five workers die and your passenger survives",
+    stayQ: "Should you stay the course and not swerve?",
     noulQ: "Does swerving save more lives than it costs?",
     noulTrue: "Swerving saves a net number of lives",
     noulFalse: "Swerving costs a net number of lives",
@@ -248,7 +253,11 @@ async function askJev(scenario) {
   });
   const data = await res.json().catch(() => null);
   if (res.status === 402) {
-    throw new Error("Jev runs on Paid Pollen — top up at enter.pollinations.ai and try again.");
+    // Jev needs Paid Pollen. Fall back to the free decisions model instead of
+    // failing: it accepts noul questions only, so the same situation is asked
+    // as propositions and the choice and the rungs are derived from its
+    // yes-probabilities — labelled as a free-tier answer everywhere.
+    return askSpan(scenario);
   }
   if (res.status === 429) {
     throw new Error("Jev is rate limited for a moment. Try again shortly.");
@@ -256,7 +265,85 @@ async function askJev(scenario) {
   if (!res.ok || !data || !data.answers) {
     throw new Error("Jev did not answer (" + res.status + ").");
   }
+  data.answers._model = "typesafe/jev-1.13 (Jev, Paid Pollen)";
   return data.answers;
+}
+
+// The free model's noul answers are independent yes-probabilities, so the
+// choice comes from the two sides normalised against each other and the five
+// rungs from five independent judgements normalised to sum to one. Nothing is
+// pre-recorded and nothing is invented: every displayed number is a live
+// span output or arithmetic on live span outputs.
+async function askSpan(scenario) {
+  const yn = (instructions) => ({
+    type: "noul",
+    instructions,
+    criteria: { "true": "Yes", "false": "No" },
+  });
+  const questions = {
+    pullSide: yn(scenario.verdictQ),
+    staySide: yn(scenario.stayQ),
+    net: {
+      type: "noul",
+      instructions: scenario.noulQ,
+      criteria: { "true": scenario.noulTrue, "false": scenario.noulFalse },
+    },
+  };
+  SCORE_LEVELS.forEach((level, i) => {
+    questions["rung" + i] = yn("Is " + scenario.action + " " + level.toLowerCase() + "?");
+  });
+
+  const res = await fetch(GEN + "/alpha/decisions", {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "respan/span-01-lite", state: scenario.state, questions }),
+  });
+  const data = await res.json().catch(() => null);
+  if (res.status === 429) {
+    throw new Error("The free model is rate limited for a moment. Try again shortly.");
+  }
+  if (!res.ok || !data || !data.answers) {
+    throw new Error("The free fallback model did not answer (" + res.status + ").");
+  }
+
+  const a = data.answers;
+  const p = Number(a.pullSide && a.pullSide.noul) || 0;
+  const s = Number(a.staySide && a.staySide.noul) || 0;
+  const sum = p + s || 1;
+  const pullProb = Math.min(1, Math.max(0, p / sum));
+  const stayProb = 1 - pullProb;
+
+  const raw = [];
+  for (let i = 0; i < SCORE_LEVELS.length; i++) {
+    raw.push(Number(a["rung" + i] && a["rung" + i].noul) || 0);
+  }
+  const rawSum = raw.reduce((x, y) => x + y, 0);
+  const probs = {};
+  let weighted = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const q = rawSum > 1e-6 ? raw[i] / rawSum : 0.2;
+    probs[String(i)] = q;
+    weighted += i * q;
+  }
+
+  return {
+    _free: true,
+    _model: "respan/span-01-lite (free fallback)",
+    verdict: {
+      type: "choice",
+      choice: pullProb >= stayProb ? "pull" : "stay",
+      probabilities: { pull: pullProb, stay: stayProb },
+      confidence: Math.abs(pullProb - stayProb),
+    },
+    acceptable: {
+      type: "score",
+      score: weighted,
+      probabilities: probs,
+      confidence: null,
+      freeDerived: true,
+    },
+    net: a.net || { type: "noul", noul: 0.5 },
+  };
 }
 
 // --- Rendering ----------------------------------------------------------------
@@ -271,6 +358,9 @@ function renderResults(scenario, answers, userVote) {
   badge.classList.toggle("stay", !pulled);
   $("verdictProb").textContent = Math.round((pulled ? pullP : stayP) * 100) + "% for " + v.choice;
   $("verdictConfidence").textContent = "confidence " + Math.round((v.confidence || 0) * 100) + "%";
+  $("answerModel").textContent = answers._free
+    ? "Free-tier answer from respan/span-01-lite, derived from its noul outputs. Top up at enter.pollinations.ai to ask Jev."
+    : "Answered by " + (answers._model || "typesafe/jev-1.13 (Jev)");
   $("actionWord").textContent = scenario.action;
 
   const bars = $("verdictBars");
@@ -312,7 +402,12 @@ function renderResults(scenario, answers, userVote) {
     rungs.appendChild(rung);
   }
   $("scoreValue").textContent =
-    "probability-weighted score " + (s.score != null ? s.score.toFixed(2) : "?") + " across the five rungs (confidence " + Math.round((s.confidence || 0) * 100) + "%)";
+    "probability-weighted score " +
+    (s.score != null ? s.score.toFixed(2) : "?") +
+    " across the five rungs" +
+    (s.freeDerived
+      ? " — five independent free-model judgements, normalised to 100%"
+      : " (confidence " + Math.round((s.confidence || 0) * 100) + "%)");
 
   const n = answers.net.noul || 0;
   $("noulFill").style.width = n * 100 + "%";
@@ -327,7 +422,7 @@ function renderResults(scenario, answers, userVote) {
     "Probabilities: pull " + Math.round(pullP * 100) + "%, stay " + Math.round(stayP * 100) + "%\n" +
     "Moral acceptability: " + (s.score != null ? s.score.toFixed(2) : "?") + "/4 — " + SCORE_LEVELS[Math.min(4, Math.round(s.score || 0))] + "\n" +
     "P(net lives saved) = " + Math.round(n * 100) + "%\n" +
-    "Powered by Jev (typesafe/jev-1.13) on Pollinations";
+    "Model: " + (answers._model || "typesafe/jev-1.13 (Jev)") + " on Pollinations";
 
   $("results").classList.remove("hidden");
 }

@@ -281,6 +281,12 @@ button.small {
   font-weight: 700;
 }
 
+.modelnote {
+  font-size: 12px;
+  max-width: 320px;
+  line-height: 1.4;
+}
+
 .bars {
   flex: 1;
   min-width: 220px;

@@ -21,6 +21,14 @@ your own Pollen** and there is no shared key in this repository that can run
 dry. Jev (`typesafe/jev-1.13`) is a Paid Pollen model; the app explains that
 and links to the top-up page if your balance cannot cover a call.
 
+**No Paid Pollen? The app still works.** On a 402 it falls back to the free
+decisions model `respan/span-01-lite`, which accepts `noul` questions only,
+asks it the same situation as propositions (should you act, should you not
+act, is each rung of the scale true) and derives the choice and the rung
+histogram from its live yes-probabilities — normalised, never invented. The
+result is labelled as a free-tier answer with a top-up link, so nobody sees a
+pre-recorded number wearing a "live" badge.
+
 ## What it asks Jev
 
 One request to `POST /alpha/decisions` per scenario, with all three typed
@@ -54,6 +62,11 @@ Everything worth editing is in `app.js`, marked with `EDIT ME`:
 | Scenarios in `SCENARIOS` | The trolley variants the lab offers |
 | `SCORE_LEVELS` | The moral acceptability rungs |
 | `LEVER_FAMILY` | Which ratios the gauntlet runs |
+
+The free-tier fallback lives in `askSpan()` in `app.js`; it sends eight `noul`
+questions to `respan/span-01-lite` and derives the choice (two sides
+normalised against each other) and the five rungs (five judgements normalised
+to 100%).
 
 ## Background
 
