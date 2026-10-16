@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Jev Trolley Lab</title>
+    <meta
+      name="description"
+      content="Pull the lever and watch Jev, a calibrated decision model, show its probabilities on the trolley problem. Powered by Pollinations."
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Jev Trolley Lab</h1>
+      <div class="topbar-right">
+        <span id="accountLabel" class="pill hidden"></span>
+        <button id="signOutBtn" class="ghost hidden" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <main>
+      <!-- Sign in -->
+      <section id="screenSignIn" class="screen">
+        <div class="panel">
+          <h2>Before the trolley runs</h2>
+          <p>
+            Jev answers with probabilities, not prose, and every call is billed.
+            Sign in to Pollinations and approve a key scoped to this app —
+            <strong>you pay with your own Pollen</strong>, and nothing here is
+            funded by a shared key that can run dry.
+          </p>
+          <button id="startBtn" class="primary" type="button">Sign in with Pollinations</button>
+          <div id="deviceStep" class="device hidden">
+            <p class="muted">Open this link and approve the request:</p>
+            <a id="deviceLink" class="devicelink" href="#" target="_blank" rel="noreferrer"></a>
+            <p id="deviceStatus" class="status">Waiting for approval...</p>
+          </div>
+          <p id="signInError" class="error hidden"></p>
+        </div>
+        <div class="panel small">
+          <h3>No redirect to configure</h3>
+          <p class="muted">
+            This app uses the BYOP device flow, so there is no callback URL to
+            register — sign in works from any host, including a copy of this
+            repository on your own machine.
+          </p>
+        </div>
+      </section>
+
+      <!-- Lab -->
+      <section id="screenApp" class="screen hidden">
+        <div class="panel">
+          <h2>Pick a trolley</h2>
+          <p class="muted" id="scenarioBlurb"></p>
+          <div id="scenarioList" class="scenarios"></div>
+        </div>
+
+        <div class="panel">
+          <h2>Your verdict, then Jev's</h2>
+          <p class="state" id="scenarioState"></p>
+          <div class="controls">
+            <button id="votePull" class="ghost" type="button">I would pull</button>
+            <button id="voteStay" class="ghost" type="button">I would do nothing</button>
+            <button id="askBtn" class="primary" type="button">Ask Jev</button>
+          </div>
+          <p id="yourVoteLine" class="muted vote hidden"></p>
+          <p id="appError" class="error hidden"></p>
+
+          <div id="results" class="results hidden">
+            <div class="verdict">
+              <div id="verdictBadge" class="badge">—</div>
+              <div class="verdict-meta">
+                <div id="verdictProb" class="big">—</div>
+                <div id="verdictConfidence" class="muted"></div>
+              </div>
+              <div id="verdictBars" class="bars"></div>
+            </div>
+            <div class="agreement hidden" id="agreementLine"></div>
+
+            <h3>Moral acceptability of <span id="actionWord">pulling</span></h3>
+            <div id="scoreRungs" class="rungs"></div>
+            <p id="scoreValue" class="muted"></p>
+
+            <h3>Net lives</h3>
+            <div class="noul">
+              <div class="meter"><div id="noulFill" class="fill"></div></div>
+              <p id="noulLine" class="muted"></p>
+            </div>
+
+            <button id="copyBtn" class="ghost small" type="button">Copy the result</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>The moral curve</h2>
+          <p class="muted">
+            Run the lever family from one life against one up to a hundred
+            against one, and watch where Jev's probability of pulling bends.
+            The article this app is based on ran thousands of setups; this is
+            your seven-question version of the same idea.
+          </p>
+          <button id="gauntletBtn" class="primary" type="button">Run the gauntlet</button>
+          <p id="gauntletStatus" class="muted"></p>
+          <div id="chartWrap" class="chart hidden">
+            <svg id="chart" viewBox="0 0 640 300" role="img" aria-label="Probability of pulling against lives saved"></svg>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <a href="https://pollinations.ai/?ref=badge" target="_blank" rel="noreferrer">
+        <img
+          src="https://raw.githubusercontent.com/pollinations/pollinations/main/packages/ui/src/brand/badge-made-with.svg"
+          alt="Made with pollinations.ai"
+        />
+      </a>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>
